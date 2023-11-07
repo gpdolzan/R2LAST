@@ -1,125 +1,84 @@
 import socket
+import struct
 import subprocess
-import sys
-import threading
 
 # Client configuration
-SERVER_IP = sys.argv[1]
-SERVER_PORT = 8521  # Communicate with the server via this port
+MULTICAST_IP = '224.0.0.1'
+MULTICAST_PORT = 5004
+CHUNK_SIZE = 1472  # Packet size including 4 bytes for the counter
+CLIENT_INTERFACE_IP = '0.0.0.0'  # Use the appropriate interface IP if needed
 
-BUFFER_SIZE = 1472
-PORT_INITIAL_RANGE = 8523
-PORT_FINAL_RANGE = 8623
-player = None
+# Create a UDP socket
+client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-sock = None  # Declare the socket globally
+# Allow multiple clients on the same machine (for testing purposes)
+client_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-def cleanup_and_exit():
-    # Function to deregister from the server and print info before exiting
-    global out_of_order_counter, lost_packets_counter, sock, player
-    player.terminate()
-    try:
-        if sock:
-            # Send the deregisteruser message to the server
-            sock.sendto(b'deregisteruser', (SERVER_IP, SERVER_PORT))
-            # Wait for the deregisteruserok confirmation from the server
-            while True:
-                try:
-                    data, _ = sock.recvfrom(BUFFER_SIZE)
-                    if data == b'deregisteruserok':
-                        print("Deregistered successfully.")
-                        break
-                except socket.timeout:
-                    print("No response from server on deregister. Exiting anyway.")
-                    break
-    finally:
-        print_info_and_exit()
+# Bind to the server address
+client_sock.bind((CLIENT_INTERFACE_IP, MULTICAST_PORT))
 
-def print_info_and_exit():
-    global out_of_order_counter, lost_packets_counter, player
-    # Calculate lost packets (gaps in the sequence)
-    if sock:
-        sock.close()
-    lost_packets_counter += sum(1 for i in range(last_counter + 1, max(buffer.keys(), default=0) + 1) if i not in buffer)
-    player.terminate()
-    print(f"Packets that arrived out of order: {out_of_order_counter}")
-    print(f"Packets that never arrived: {lost_packets_counter}")
-    sys.exit(0)
+# Tell the operating system to add the socket to the multicast group
+group = socket.inet_aton(MULTICAST_IP) + socket.inet_aton(CLIENT_INTERFACE_IP)
+client_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, group)
 
-def main():
-    global out_of_order_counter, lost_packets_counter, buffer, last_counter, sock, player
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Try to bind to an available port
-    for port in range(PORT_INITIAL_RANGE, PORT_FINAL_RANGE + 1):
-        try:
-            sock.bind(('', port))
-            print(f"Socket successfully bound to port {sock.getsockname()[1]}")
-            break
-        except socket.error:
+# Initialize counters
+expected_packet_counter = None
+lost_packets = 0
+out_of_order_packets = 0
+
+# Prepare VLC subprocess command
+vlc_command = "vlc -"  # The dash '-' tells VLC to accept input from stdin
+
+# Start VLC as a subprocess
+vlc_process = subprocess.Popen(["vlc", "fd://0"], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+try:
+    while True:
+        # Receive packet
+        data, address = client_sock.recvfrom(CHUNK_SIZE)
+
+        # Check for "end-of-stream" packet
+        if data[4:] == b'END_OF_STREAM':
+            print("End of stream detected, resetting counter.")
+            expected_packet_counter = None
             continue
-    else:
-        print("It was not possible to bind to any port in the range 8523-8623.")
-        sys.exit()
 
-    # Register with the server
-    sock.sendto(b'registerclient', (SERVER_IP, SERVER_PORT))
+        # Extract packet counter
+        packet_counter, = struct.unpack('>I', data[:4])
+        video_data = data[4:]
 
-    while True:
-        # Wait for 'registerclientok' from the server
-        data, addr = sock.recvfrom(BUFFER_SIZE)
-        if data == b'registerclientok':
-            print("Successfully registered!")
-            break
+        if expected_packet_counter is None:
+            # This is the first packet received; set the initial expected counter
+            expected_packet_counter = packet_counter
+        else:
+            if packet_counter != expected_packet_counter:
+                # Packet is out of order or missing
+                if packet_counter < expected_packet_counter:
+                    # Packet is out of order
+                    out_of_order_packets += 1
+                else:
+                    # Some packets were missed
+                    lost_packets += packet_counter - expected_packet_counter
 
-    # wait for streamstart message
-    while True:
-        # remove counter from the message
-        data, addr = sock.recvfrom(BUFFER_SIZE)
-        if data[4:] == b'streamstart':
-            print("Server started streaming.")
-            break
+                # Log the packet issue
+                print(f"Packet issue detected. Expected: {expected_packet_counter}, Received: {packet_counter}")
 
-    # Start a VLC instance as a subprocess
-    player = subprocess.Popen(["vlc", "fd://0"], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Set the next expected packet counter
+            expected_packet_counter = (packet_counter + 1) % (2 ** 32)
 
-    last_counter = 1
-    buffer = {}  # Buffer for out-of-order packets
-    out_of_order_counter = 0
-    lost_packets_counter = 0
+        # Write the video data to VLC's stdin
+        vlc_process.stdin.write(video_data)
 
-    # Set a timeout for the socket
-    sock.settimeout(2)  # Set the timeout to 2 seconds
+except KeyboardInterrupt:
+    print("Exiting client...")
 
-    while True:
-        try:
-            data, addr = sock.recvfrom(BUFFER_SIZE)
-            counter = int.from_bytes(data[:4], 'big')
+finally:
+    # Close VLC process
+    if vlc_process:
+        vlc_process.terminate()
 
-            # check for streamshutdown message
-            if data[4:] == b'streamshutdown':
-                print("Server finished streaming. Exiting gracefully...")
-                print_info_and_exit()
+    # Close the socket
+    client_sock.close()
 
-            if counter == last_counter + 1:
-                player.stdin.write(data[4:])
-                player.stdin.flush()  # Ensure data is sent to VLC immediately
-                last_counter += 1
-
-                # Check for subsequent packets in the buffer
-                while last_counter + 1 in buffer:
-                    player.stdin.write(buffer[last_counter + 1])
-                    del buffer[last_counter + 1]
-                    last_counter += 1
-            else:
-                # Store the packet in the buffer if it arrives out of order
-                buffer[counter] = data[4:]
-                if counter > last_counter + 1:
-                    out_of_order_counter += 1
-        except socket.timeout:
-            player.stdin.flush()
-            last_counter = 1  # Reset counter if needed
-            buffer.clear()    # Clear the buffer to avoid playing old frames
-            continue  # Continue with the next iteration of the loop
-
-if __name__ == '__main__':
-    main()
+    # Log final statistics
+    print(f"Total lost packets: {lost_packets}. Total out of order packets: {out_of_order_packets}.")

@@ -1,18 +1,24 @@
 import socket
-import time
-import threading
+import struct
+import logging
 import subprocess
 import re
 import os
+import time
 from moviepy.editor import VideoFileClip
 
 # Server configuration
 VIDEO_FOLDER = "video"
-SERVER_PORT = 8521
-BUFFER_SIZE = 1472  # MTU IPV4 - 20 (IP header) - 8 (UDP header)
+MULTICAST_IP = '224.0.0.1'
+MULTICAST_PORT = 5004
+CHUNK_SIZE = 1468 # Packet size minus 4 bytes for the counter
 
-clients = set()  # Set of registered clients
-clients_lock = threading.Lock()  # Lock for accessing the clients set
+# Create the datagram socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Set the time-to-live for messages to 1 so they do not go past the local network segment.
+ttl = struct.pack('b', 1)
+sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
 # Function to list all video files in a directory
 def list_video_files(directory):
@@ -36,112 +42,56 @@ def get_video_duration(filename):
     clip.close()
     return duration
 
-def read_video(filename):
-    with open(filename, 'rb') as file:
-        while True:
-            data = file.read(BUFFER_SIZE - 4)  # 4 bytes reserved for the counter
-            if not data:
-                break
-            yield data
+def stream_all_videos(video_folder):
+    video_files = list_video_files(video_folder)  # Get the list of video files
 
-def listen_for_clients(s, stop_event):
-    s.settimeout(1)  # Set a timeout for the socket
-    while not stop_event.is_set():
-        try:
-            data, addr = s.recvfrom(BUFFER_SIZE)
-            if data == b'registerclient':
-                with clients_lock:  # Acquire lock before accessing the clients set
-                    clients.add(addr)
-                s.sendto(b'registerclientok', addr)
-                print(f"Client registered: {addr}")
-            elif data == b'deregisteruser':  # Handle deregistration
-                with clients_lock:  # Acquire lock before accessing the clients set
-                    if addr in clients:
-                        clients.remove(addr)
-                        s.sendto(b'deregisteruserok', addr)  # Send confirmation back to the client
-                        print(f"Client deregistered: {addr}")
-                    else:
-                        print(f"Client not found in registration list: {addr}")
-            else:
-                print(f"Invalid command received from {addr}: {data}")
-        except socket.timeout:
-            continue  # If a timeout occurs, just continue and check the event again
-        except OSError:
-            if stop_event.is_set():
-                # If the stop event is set, it means we're shutting down, so break out of the loop
-                break
-            else:
-                # Re-raise the exception if it's not part of the shutdown process
-                raise
+    while True:  # Loop forever
+        for video_file in video_files:
+            print(f"Streaming video: {video_file}")
+            stream_video(video_file)  # Stream each video
+            time.sleep(3)  # Wait a bit before streaming the next video (optional)
 
-def main():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind(("", SERVER_PORT))
-    s.settimeout(1)
+def stream_video(video_file):
+    with open(video_file, 'rb') as f:
+        counter = 0  # Initialize packet counter
+        bitrate = get_video_bitrate(video_file)  # in bits per second
 
-    print(f"Server started on port {SERVER_PORT}!")
+        if bitrate is None:
+            raise ValueError("Could not determine video bitrate")
 
-    stop_event = threading.Event()    
-    client_listener_thread = threading.Thread(target=listen_for_clients, args=(s, stop_event), daemon=True)
-    client_listener_thread.start()
-
-    video_files = list_video_files(VIDEO_FOLDER)  # List video files in the folder
-
-    input("Enter quando estiverem conectados")
-
-    # send streamstart message
-    with clients_lock:  # Acquire lock before notifying clients of stream start
-        for client in clients:
-            # create counter starting at 1
-            counter = 1
-            packet = counter.to_bytes(4, 'big') + b"streamstart"
-            s.sendto(packet, client)
-
-    print("Stream started!")
-
-    for video_file in video_files:  # Iterate over each video file
-        print(f"Starting video stream for {video_file}...")
-
-        BITRATE = get_video_bitrate(video_file)
-        BYTES_PER_SECOND = BITRATE / 8
-        VIDEO_DURATION = get_video_duration(video_file)
-        packet_transmission_time = (BUFFER_SIZE - 4) / BYTES_PER_SECOND
+        # Calculate the time interval between packets in seconds
+        packet_transmission_time = (CHUNK_SIZE * 8) / bitrate  # convert CHUNK_SIZE to bits
 
         start_time = time.time()
 
-        with clients_lock:  # Acquire lock before iterating over the clients set
-            for client in clients:
-                counter = 1
-                for data in read_video(video_file):
-                    packet = counter.to_bytes(4, 'big') + data
-                    try:
-                        s.sendto(packet, client)
-                    except socket.error as e:
-                        print(f"Failed to send data to {client}: {e}")
-                        continue
+        while True:
+            chunk = f.read(CHUNK_SIZE)
+            if not chunk:
+                # Send a special "end-of-stream" packet
+                end_packet = struct.pack('>I', counter) + b'END_OF_STREAM'
+                sock.sendto(end_packet, (MULTICAST_IP, MULTICAST_PORT))
+                break  # End of file
 
-                    counter = (counter + 1) % (2 ** 32)
+            # Prepend the 4-byte counter
+            packet = struct.pack('>I', counter) + chunk
 
-                    next_packet_time = start_time + (counter * packet_transmission_time)
-                    while time.time() < next_packet_time:
-                        if stop_event.is_set():
-                            break  # Exit if stop event is set
-                        time.sleep(0.001)  # Sleep briefly to avoid a busy wait
+            try:
+                # Send the packet to the multicast group
+                sock.sendto(packet, (MULTICAST_IP, MULTICAST_PORT))
+            except socket.error as e:
+                print(f"Failed to send data to multicast group {MULTICAST_IP}:{MULTICAST_PORT}: {e}")
+                continue  # Skip to the next loop iteration
 
-        time.sleep(3)  # Wait for the duration of the video before starting the next
-    
-    # Send a shutdown signal to the clients
-    with clients_lock:  # Acquire lock before notifying clients of shutdown
-        for client in clients:
-            # create counter starting at 0
-            counter = 0
-            packet = counter.to_bytes(4, 'big') + b"streamshutdown"
-            s.sendto(packet, client)
+            counter = (counter + 1) % (2 ** 32)
 
-    stop_event.set()
-    client_listener_thread.join()
-    s.close()
-    print("Server shut down gracefully.")
+            # Calculate the time to send the next packet
+            next_packet_time = start_time + (counter * packet_transmission_time)
+            time_to_wait = next_packet_time - time.time()
+            if time_to_wait > 0:
+                time.sleep(time_to_wait)
 
-if __name__ == '__main__':
-    main()
+        # Wait a short time before streaming the next video
+        time.sleep(3)
+
+# Call stream_all_videos with the path to your video folder
+stream_all_videos(VIDEO_FOLDER)

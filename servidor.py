@@ -45,6 +45,7 @@ def read_video(filename):
             yield data
 
 def listen_for_clients(s, stop_event):
+    s.settimeout(1)  # Set a timeout for the socket
     while not stop_event.is_set():
         try:
             data, addr = s.recvfrom(BUFFER_SIZE)
@@ -88,58 +89,59 @@ def main():
 
     input("Enter quando estiverem conectados")
 
-    try:
-        while not stop_event.is_set():  # Loop continuously until stopped
+    # send streamstart message
+    with clients_lock:  # Acquire lock before notifying clients of stream start
+        for client in clients:
+            # create counter starting at 1
+            counter = 1
+            packet = counter.to_bytes(4, 'big') + b"streamstart"
+            s.sendto(packet, client)
 
-            # while client set is empty, wait
-            while not clients:
-                pass
+    print("Stream started!")
 
-            for video_file in video_files:  # Iterate over each video file
-                print(f"Starting video stream for {video_file}...")
+    for video_file in video_files:  # Iterate over each video file
+        print(f"Starting video stream for {video_file}...")
 
-                BITRATE = get_video_bitrate(video_file) or 5000000
-                BYTES_PER_SECOND = BITRATE / 8
-                VIDEO_DURATION = get_video_duration(video_file)
-                packet_transmission_time = (BUFFER_SIZE - 4) / BYTES_PER_SECOND
+        BITRATE = get_video_bitrate(video_file)
+        BYTES_PER_SECOND = BITRATE / 8
+        VIDEO_DURATION = get_video_duration(video_file)
+        packet_transmission_time = (BUFFER_SIZE - 4) / BYTES_PER_SECOND
 
-                start_time = time.time()
+        start_time = time.time()
 
-                with clients_lock:  # Acquire lock before iterating over the clients set
-                    for client in clients:
-                        counter = 1
-                        for data in read_video(video_file):
-                            packet = counter.to_bytes(4, 'big') + data
-                            try:
-                                s.sendto(packet, client)
-                            except socket.error as e:
-                                print(f"Failed to send data to {client}: {e}")
-                                continue
-
-                            counter = (counter + 1) % (2 ** 32)
-
-                            next_packet_time = start_time + (counter * packet_transmission_time)
-                            while time.time() < next_packet_time:
-                                if stop_event.is_set():
-                                    break  # Exit if stop event is set
-                                time.sleep(0.001)  # Sleep briefly to avoid a busy wait
-
-                time.sleep(3)  # Wait for the duration of the video before starting the next
-                if stop_event.is_set():
-                    break  # Exit if stop event is set
-
-    except KeyboardInterrupt:
-        print("Shutdown signal received. Ending the stream...")
-        stop_event.set()
-
-    finally:
-        # Clean up the resources
-        with clients_lock:  # Acquire lock before notifying clients of shutdown
+        with clients_lock:  # Acquire lock before iterating over the clients set
             for client in clients:
-                s.sendto(b"streamshutdown", client)
-        s.close()
-        client_listener_thread.join()
-        print("Server shut down gracefully.")
+                counter = 1
+                for data in read_video(video_file):
+                    packet = counter.to_bytes(4, 'big') + data
+                    try:
+                        s.sendto(packet, client)
+                    except socket.error as e:
+                        print(f"Failed to send data to {client}: {e}")
+                        continue
+
+                    counter = (counter + 1) % (2 ** 32)
+
+                    next_packet_time = start_time + (counter * packet_transmission_time)
+                    while time.time() < next_packet_time:
+                        if stop_event.is_set():
+                            break  # Exit if stop event is set
+                        time.sleep(0.001)  # Sleep briefly to avoid a busy wait
+
+        time.sleep(3)  # Wait for the duration of the video before starting the next
+    
+    # Send a shutdown signal to the clients
+    with clients_lock:  # Acquire lock before notifying clients of shutdown
+        for client in clients:
+            # create counter starting at 0
+            counter = 0
+            packet = counter.to_bytes(4, 'big') + b"streamshutdown"
+            s.sendto(packet, client)
+
+    stop_event.set()
+    client_listener_thread.join()
+    s.close()
+    print("Server shut down gracefully.")
 
 if __name__ == '__main__':
     main()

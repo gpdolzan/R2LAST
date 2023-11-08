@@ -1,0 +1,10 @@
+SERVER - 2023-11-08 02:31:54,751 - INFO - Intervalo de transmissão de pacote definido pela linha de comando: 0.006 segundos.
+SERVER - 2023-11-08 02:31:54,751 - INFO - Socket criado.
+SERVER - 2023-11-08 02:31:54,751 - INFO - Tempo de vida das mensagens definido para 1.
+SERVER - 2023-11-08 02:31:54,751 - INFO - Preparado 'video/chika001.ts' com intervalo de pacote 0.006 segundos.
+SERVER - 2023-11-08 02:31:54,751 - INFO - Arquivos de vídeo encontrados: ['video/chika001.ts']
+SERVER - 2023-11-08 02:31:54,751 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:32:37,075 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:32:37,075 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:32:41,279 - INFO - Servidor encerrando por KeyboardInterrupt.
+SERVER - 2023-11-08 02:32:41,279 - INFO - Pacotes enviados: 7756

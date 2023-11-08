@@ -1,0 +1,14 @@
+CLIENTE - 2023-11-08 01:10:45,720 - INFO - Socket criado.
+CLIENTE - 2023-11-08 01:10:45,720 - INFO - Socket configurado para permitir múltiplos clientes.
+CLIENTE - 2023-11-08 01:10:45,720 - INFO - Socket vinculado a 0.0.0.0:5004.
+CLIENTE - 2023-11-08 01:10:45,720 - INFO - Socket adicionado ao grupo multicast 224.0.0.1.
+CLIENTE - 2023-11-08 01:10:45,721 - INFO - Processo VLC iniciado.
+CLIENTE - 2023-11-08 01:10:45,721 - INFO - Iniciando loop de recebimento de pacotes.
+CLIENTE - 2023-11-08 01:10:45,722 - INFO - Primeiro pacote recebido com contador 48
+CLIENTE - 2023-11-08 01:11:06,318 - INFO - Fim do stream detectado, redefinindo contador.
+CLIENTE - 2023-11-08 01:11:06,318 - INFO - Primeiro pacote recebido com contador 0
+CLIENTE - 2023-11-08 01:11:09,602 - INFO - Cliente encerrando por KeyboardInterrupt.
+CLIENTE - 2023-11-08 01:11:09,603 - INFO - Pacotes recebidos: 8125
+CLIENTE - 2023-11-08 01:11:09,603 - INFO - Processo VLC terminado.
+CLIENTE - 2023-11-08 01:11:09,603 - INFO - Socket fechado.
+CLIENTE - 2023-11-08 01:11:09,603 - INFO - Total de pacotes perdidos: 0. Total de pacotes fora de ordem: 0.

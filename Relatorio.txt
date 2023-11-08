@@ -1,0 +1,55 @@
+1. Objetivo do Projeto:
+
+O projeto visa construir um streaming de video utilizando uma comunicação de rede eficiente onde o servidor pode transmitir dados para diversos clientes simultaneamente, isso eh feito utilizando o protocolo UDP e multicast.
+
+2. Decisoes de Projeto:
+
+2.1 Tamanho do pacote - O tamanho do pacote foi configurado para 1472 bytes para evitar a fragmentação de pacotes. Isso se alinha com o MTU padrão da maioria das redes Ethernet e otimiza a transmissão de dados. OBS: 4 bytes desses 1472 sao reservados para o contador dos pacotes de dados, isso faz com que tenhamos 1468 bytes de dados do video para cada pacote enviado.
+
+2.2 Multicast - Foi escolhido o protocolo UDP com multicast para permitir a transmissão de dados de vídeo de um para muitos, o que é mais eficiente em termos de largura de banda do que o unicast, especialmente quando se transmite para um grande número de clientes. Alem dsso, isso faz com que os clientes estejam, em geral, assistindo o mesmo conteudo quase ao mesmo tempo. Nos tentamos implementar sem o multicast, utilizando um for para enviar para cada cliente que se cadastrasse no servidor, o que provou ser extremamente ineficiente, alem de provocar atrasos gigantescos de um cliente para outro.
+
+2.3 Pacote de Final de Transmissão - A introdução de um pacote especial 'END_OF_STREAM' no final de cada vídeo permite que o cliente identifique o fim da transmissão, desse modo ficou mais facil de se preparar para o inicio do proximo video. Foi possivel tambem, identificar tambem o momento exato em que o contador do pacote de dados iria ser colocado no inicio novamente (ajudou muito na contagem de pacotes perdidos e pacotes fora de ordem).
+
+2.4 Contadores de Pacotes - Falamos agora pouco sobre contar pacotes, esses contadores sequenciais nos pacotes permitiram que o cliente detecte a perda de pacotes e pacotes fora de ordem, proporcionando uma forma de validar a sequência de dados recebidos. Isso foi muito util para testar o codigo, principalmente em sequencias longas de tempo, como por exemplo, 10 minutos consecutivos com 3 clientes recebendo os dados.
+
+2.5 Integracao com o VLC - Utilizar o VLC media player via subprocessos do python permite que o cliente reproduza os dados de vídeo em tempo real, aproveitando uma ferramenta existente e robusta, e elimina a necessidade de desenvolver um reprodutor de vídeo personalizado, facilitou consideravelmente a realizacao do projeto.
+
+2.6 Configuração via Linha de Comando - Como foi indicado na especificacao do projeto, permitir que o intervalo de transmissão de pacotes seja definido via linha de comando fornece flexibilidade e criatividade para experimentar com essa ferramenta que nos desenvolvemos.
+
+2.7 Logging Detalhado - Tambem esta na especificacao do projeto, nos nao podemos deixar de citar o quao importante isso foi para realizar o debugging do nosso programa. Proporcionou uma facilidade e rapidez de compreender e arrumar os erros de logica que faziam o codigo nao funcionar da maneira adequada.
+
+2.8 Tratamento de Interrupções do Usuário - Adicionar manipulação para KeyboardInterrupt permite que o servidor e o cliente sejam encerrados de maneira controlada, garantindo que todos os recursos sejam liberados corretamente e as estatísticas finais sejam registradas. Tambem permitiu que os testes possam ser mais criativos, como pode ser observado nos logs que estamos disponibilizando.
+
+3. Estrutura e Implementacao: 
+
+3.1 Servidor:
+    Prepara vídeos para transmissão, segmentando-os em pacotes.
+    Envia pacotes para um endereço IP multicast em intervalos regulares.
+    Calcula o intervalo entre os pacotes para manter a consistência da taxa de bits ou usa um valor fixo fornecido via linha de comando.
+    Registra atividades e possíveis erros em um arquivo de log.
+
+3.2 Cliente:
+    Configura-se para receber pacotes do endereço multicast do servidor.
+    Utiliza o VLC player para reproduzir o vídeo a partir dos pacotes recebidos.
+    Reorganiza os pacotes se os mesmo chegarem fora de ordem.
+    Contabiliza pacotes recebidos, perdidos e fora de ordem.
+    Registra ocorrências no processo de recebimento em um arquivo de log.
+
+4. Funcionamento do Servidor:
+    O servidor lê arquivos de vídeo do diretório especificado (no caso, o diretorio video) e os envia em pacotes. Caso um intervalo de transmissão seja especificado na linha de comando, ele é utilizado; caso contrário, o servidor calcula o intervalo com base no bitrate do vídeo, ou seja, o tempo de transmissao do video eh igual ou levemente mais rapido do que o video eh enviado. Os pacotes são enviados com um contador sequencial de 4 bytes que permite aos clientes verificar a ordem de chegada.
+
+5. Funcionamento do Cliente:
+    O cliente se junta ao grupo multicast e começa a ouvir os pacotes enviados pelo servidor. Ao receber um pacote, ele verifica se está na ordem correta com base no contador sequencial. Os dados de vídeo são passados para o subprocesso VLC para reprodução. O cliente trata os casos de pacotes fora de ordem e perda de pacotes.
+
+6. Resultados obtidos:
+
+6.1 Servidor:
+    A transmissão dos vídeos foi realizada com sucesso, e os pacotes foram enviados ao grupo multicast conforme o intervalo estabelecido.
+
+6.2 Cliente:
+    Os vídeos foram recebidos e reproduzidos com a identificação de pacotes fora de ordem ou perdidos, demonstrando a capacidade do cliente de lidar com as características não confiáveis do UDP. E tambem demonstrando a sua imensa versatilidade em aplicacoes de tempo real onde eh necessario trocar velocidade por confiabilidade.
+
+7. Conclusao:
+    O projeto demonstrou que é possível realizar uma transmissão de dados eficiente para múltiplos clientes usando multicast UDP. A capacidade do cliente de lidar com a recepção de pacotes fora de ordem e a perda de pacotes é crucial para a integridade da transmissão de vídeo. Os logs fornecem uma visão detalhada do processo e permitem a análise e resolução de problemas, alem de estudar futuras possibilidades de como poderiamos melhorar esse projeto para torna-lo melhor ainda.
+
+    Para finalizar, gostariamos de expressar nossa felicidade de trabalhar neste projeto divertido e instigante. Foi uma experiência muito enriquecedora que nos permitiu explorar novas áreas e aplicar soluções criativas, para essa area da tecnologia que nos vemos a todo momento em nosso dia a dia e nunca paramos para pensar o que de fato esta acontecendo por tras. O projeto não apenas aprimorou nosso conhecimento técnico, mas também nos deu a chance de inovar e pensar fora da caixa.

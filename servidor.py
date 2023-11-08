@@ -5,93 +5,129 @@ import subprocess
 import re
 import os
 import time
+import sys
+from datetime import datetime
 from moviepy.editor import VideoFileClip
 
-# Server configuration
+# Configuração do servidor
 VIDEO_FOLDER = "video"
 MULTICAST_IP = '224.0.0.1'
 MULTICAST_PORT = 5004
-CHUNK_SIZE = 1468 # Packet size minus 4 bytes for the counter
+CHUNK_SIZE = 1468 # Tamanho do pacote menos 4 bytes para o contador
+PACKET_INTERVAL_MAP = {}  # Mapa para armazenar o intervalo de tempo entre pacotes para cada vídeo
+PACKETS_SENT = 0
+INTERVAL_TIME = None
 
-# Create the datagram socket
+# Configuração do logging
+log_filename = datetime.now().strftime("servidor_%H%M%S.txt")
+logging.basicConfig(filename=log_filename,
+                    filemode='w',
+                    level=logging.DEBUG,
+                    format='SERVER - %(asctime)s - %(levelname)s - %(message)s')
+
+# Verificar se o INTERVAL_TIME foi passado como argumento na linha de comando
+if len(sys.argv) > 1:
+    try:
+        INTERVAL_TIME = float(sys.argv[1])
+        logging.info(f"Intervalo de transmissão de pacote definido pela linha de comando: {INTERVAL_TIME} segundos.")
+    except ValueError:
+        logging.error("O valor do INTERVAL_TIME passado não é um número válido. Usando valores pré-calculados.")
+
+# Criação do socket de datagrama
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+logging.info("Socket criado.")
 
-# Set the time-to-live for messages to 1 so they do not go past the local network segment.
+# Definir o tempo de vida das mensagens para 1 para que não ultrapassem o segmento de rede local.
 ttl = struct.pack('b', 1)
 sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+logging.info("Tempo de vida das mensagens definido para 1.")
 
-# Function to list all video files in a directory
+# Função para listar todos os arquivos de vídeo em um diretório
 def list_video_files(directory):
     return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+
+# Função para calcular o intervalo de tempo entre pacotes de um vídeo
+def calculate_packet_interval(bitrate):
+    return (CHUNK_SIZE * 8) / bitrate  # converte CHUNK_SIZE para bits
+
+# Função para listar todos os arquivos de vídeo em um diretório e calcular o intervalo de pacotes
+def prepare_video_files(directory):
+    for f in os.listdir(directory):
+        full_path = os.path.join(directory, f)
+        if INTERVAL_TIME is not None:
+            PACKET_INTERVAL_MAP[full_path] = INTERVAL_TIME
+            logging.info(f"Preparado '{full_path}' com intervalo de pacote {INTERVAL_TIME} segundos.")
+        elif os.path.isfile(full_path):
+            bitrate = get_video_bitrate(full_path)
+            if bitrate is not None:
+                PACKET_INTERVAL_MAP[full_path] = calculate_packet_interval(bitrate)
+                logging.info(f"Preparado '{full_path}' com intervalo de pacote {PACKET_INTERVAL_MAP[full_path]} segundos.")
 
 def get_video_bitrate(filename):
     cmd = ["ffmpeg", "-i", filename]
     result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, _ = result.communicate()
 
-    # Search for bitrate in the FFmpeg output
+    # Procura pelo bitrate na saída do FFmpeg
     matches = re.search(r"bitrate: (\d+) kb/s", stdout.decode('utf-8'))
     if matches:
-        return int(matches.group(1)) * 1000  # Convert kbps to bps
+        return int(matches.group(1)) * 1000  # Converte kbps para bps
 
-    return None  # Return None if bitrate couldn't be extracted
-
-def get_video_duration(filename):
-    clip = VideoFileClip(filename)
-    duration = clip.duration
-    clip.close()
-    return duration
+    return None  # Retorna None se o bitrate não puder ser extraído
 
 def stream_all_videos(video_folder):
-    video_files = list_video_files(video_folder)  # Get the list of video files
+    video_files = list_video_files(video_folder)  # Obtém a lista de arquivos de vídeo
+    logging.info(f"Arquivos de vídeo encontrados: {video_files}")
 
-    while True:  # Loop forever
+    while True:  # Loop infinito
         for video_file in video_files:
-            print(f"Streaming video: {video_file}")
-            stream_video(video_file)  # Stream each video
-            time.sleep(3)  # Wait a bit before streaming the next video (optional)
+            logging.info(f"Iniciando transmissão do vídeo: {video_file}")
+            stream_video(video_file)  # Transmite cada vídeo
 
 def stream_video(video_file):
+    global PACKETS_SENT
     with open(video_file, 'rb') as f:
-        counter = 0  # Initialize packet counter
-        bitrate = get_video_bitrate(video_file)  # in bits per second
-
-        if bitrate is None:
-            raise ValueError("Could not determine video bitrate")
-
-        # Calculate the time interval between packets in seconds
-        packet_transmission_time = (CHUNK_SIZE * 8) / bitrate  # convert CHUNK_SIZE to bits
+        counter = 0  # Inicializa o contador de pacotes
+        packet_transmission_time = PACKET_INTERVAL_MAP[video_file]
 
         start_time = time.time()
 
-        while True:
-            chunk = f.read(CHUNK_SIZE)
-            if not chunk:
-                # Send a special "end-of-stream" packet
-                end_packet = struct.pack('>I', counter) + b'END_OF_STREAM'
-                sock.sendto(end_packet, (MULTICAST_IP, MULTICAST_PORT))
-                break  # End of file
+        try:
+            while True:
+                chunk = f.read(CHUNK_SIZE)
+                if not chunk:
+                    # Envia um pacote especial de "fim de transmissão"
+                    end_packet = struct.pack('>I', counter) + b'END_OF_STREAM'
+                    sock.sendto(end_packet, (MULTICAST_IP, MULTICAST_PORT))
+                    PACKETS_SENT += 1
+                    logging.info("Fim de transmissão detectado.")
+                    break  # Fim do arquivo
 
-            # Prepend the 4-byte counter
-            packet = struct.pack('>I', counter) + chunk
+                # Precede o contador de 4 bytes
+                packet = struct.pack('>I', counter) + chunk
 
-            try:
-                # Send the packet to the multicast group
-                sock.sendto(packet, (MULTICAST_IP, MULTICAST_PORT))
-            except socket.error as e:
-                print(f"Failed to send data to multicast group {MULTICAST_IP}:{MULTICAST_PORT}: {e}")
-                continue  # Skip to the next loop iteration
+                try:
+                    # Envia o pacote para o grupo multicast
+                    sock.sendto(packet, (MULTICAST_IP, MULTICAST_PORT))
+                    PACKETS_SENT += 1
+                except socket.error as e:
+                    logging.error(f"Falha ao enviar dados para o grupo multicast {MULTICAST_IP}:{MULTICAST_PORT}: {e}")
+                    continue  # Pula para a próxima iteração do loop
 
-            counter = (counter + 1) % (2 ** 32)
+                counter = (counter + 1) % (2 ** 32)
 
-            # Calculate the time to send the next packet
-            next_packet_time = start_time + (counter * packet_transmission_time)
-            time_to_wait = next_packet_time - time.time()
-            if time_to_wait > 0:
-                time.sleep(time_to_wait)
+                # Calcula o tempo para enviar o próximo pacote
+                next_packet_time = start_time + (counter * packet_transmission_time)
+                time_to_wait = next_packet_time - time.time()
+                if time_to_wait > 0:
+                    time.sleep(time_to_wait)
+        except KeyboardInterrupt:
+            logging.info("Servidor encerrando por KeyboardInterrupt.")
+            logging.info(f"Pacotes enviados: {PACKETS_SENT}")
+            sys.exit(0)
 
-        # Wait a short time before streaming the next video
-        time.sleep(3)
+# Preparar a lista de arquivos de vídeo e seus intervalos de pacotes
+prepare_video_files(VIDEO_FOLDER)
 
-# Call stream_all_videos with the path to your video folder
+# Chama stream_all_videos com o caminho para a pasta de vídeos
 stream_all_videos(VIDEO_FOLDER)

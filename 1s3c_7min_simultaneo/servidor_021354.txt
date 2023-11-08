@@ -1,0 +1,47 @@
+SERVER - 2023-11-08 02:13:54,015 - INFO - Socket criado.
+SERVER - 2023-11-08 02:13:54,015 - INFO - Tempo de vida das mensagens definido para 1.
+SERVER - 2023-11-08 02:13:54,065 - INFO - Preparado 'video/chika001.ts' com intervalo de pacote 0.002939674593241552 segundos.
+SERVER - 2023-11-08 02:13:54,066 - INFO - Arquivos de vídeo encontrados: ['video/chika001.ts']
+SERVER - 2023-11-08 02:13:54,066 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:14:14,803 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:14:14,803 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:14:35,540 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:14:35,540 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:14:56,277 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:14:56,277 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:15:17,014 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:15:17,014 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:15:37,751 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:15:37,751 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:15:58,488 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:15:58,488 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:16:19,225 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:16:19,225 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:16:39,962 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:16:39,962 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:17:00,699 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:17:00,699 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:17:21,436 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:17:21,436 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:17:42,173 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:17:42,173 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:18:02,910 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:18:02,910 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:18:23,647 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:18:23,647 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:18:44,384 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:18:44,384 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:19:05,121 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:19:05,121 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:19:25,858 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:19:25,859 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:19:46,595 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:19:46,595 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:20:07,332 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:20:07,332 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:20:28,069 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:20:28,069 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:20:48,806 - INFO - Fim de transmissão detectado.
+SERVER - 2023-11-08 02:20:48,806 - INFO - Iniciando transmissão do vídeo: video/chika001.ts
+SERVER - 2023-11-08 02:21:03,496 - INFO - Servidor encerrando por KeyboardInterrupt.
+SERVER - 2023-11-08 02:21:03,497 - INFO - Pacotes enviados: 146098
